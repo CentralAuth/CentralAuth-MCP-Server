@@ -5,6 +5,8 @@ import type { ServerConfig } from "./types.js";
 loadDotEnv();
 
 const envSchema = z.object({
+  CENTRALAUTH_API_KEY: z.string().trim().min(1).optional(),
+  CENTRALAUTH_API_BASE_URL: z.string().trim().url().optional(),
   CENTRALAUTH_AUTH_BASE_URL: z.string().trim().url().optional(),
   CENTRALAUTH_CLIENT_ID: z.string().trim().min(1).optional(),
   CENTRALAUTH_CLIENT_SECRET: z.string().trim().min(1).optional(),
@@ -21,6 +23,8 @@ export function loadConfig(): ServerConfig {
   }
 
   return {
+    apiKey: parsed.data.CENTRALAUTH_API_KEY,
+    apiBaseUrl: parsed.data.CENTRALAUTH_API_BASE_URL ?? "https://centralauth.com/api",
     authBaseUrl: parsed.data.CENTRALAUTH_AUTH_BASE_URL ?? "https://centralauth.com",
     clientId: parsed.data.CENTRALAUTH_CLIENT_ID,
     clientSecret: parsed.data.CENTRALAUTH_CLIENT_SECRET,

@@ -1,7 +1,9 @@
 export type AppType = "generic" | "nextjs" | "express" | "react-native" | "desktop";
-export type EnvMode = "basic" | "oauth";
+export type EnvMode = "basic" | "oauth" | "admin";
 
 export interface ServerConfig {
+  apiKey?: string;
+  apiBaseUrl: string;
   authBaseUrl: string;
   clientId?: string;
   clientSecret?: string;
@@ -87,6 +89,8 @@ export interface Organization {
   id: string;
   tenantId: string;
   name: string;
+  clientSecret?: string;
+  newClientSecret?: string;
   logo?: string | null;
   domain?: string | null;
   customDomain?: string | null;

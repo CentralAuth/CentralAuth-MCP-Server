@@ -82,18 +82,30 @@ export function validateEnvRequirements(config: ServerConfig, mode: EnvMode): st
     statusLine("CENTRALAUTH_CALLBACK_URL", Boolean(config.callbackUrl), "Must match the dashboard registration"),
   ];
 
+  const adminChecks = [
+    statusLine("CENTRALAUTH_API_KEY", Boolean(config.apiKey), "Optional; only needed for organization creation and secret rotation tools"),
+    statusLine("CENTRALAUTH_API_BASE_URL", Boolean(config.apiBaseUrl), "Defaults to `https://centralauth.com/api`"),
+  ];
+
   return [
     `## Environment validation (${mode})`,
     "",
     ...basicChecks,
     ...(mode === "oauth" ? ["", ...oauthChecks] : []),
+    ...(mode === "admin" ? ["", ...adminChecks] : []),
     "",
-    "No API key is required for this MCP server.",
+    mode === "admin"
+      ? Boolean(config.apiKey)
+        ? "Admin organization-management tools are enabled."
+        : "Admin tools stay optional and will be unavailable until `CENTRALAUTH_API_KEY` is set."
+      : "No API key is required for the docs-only integration tools.",
     mode === "oauth"
       ? hasOAuthConfig(config)
         ? "OAuth-specific guidance is fully configured."
         : "OAuth-specific env vars are still incomplete for your application integration."
-      : "Basic documentation and setup guidance are ready to use.",
+      : mode === "basic"
+        ? "Basic documentation and setup guidance are ready to use."
+        : "",
   ].filter(Boolean).join("\n");
 }
 
@@ -121,6 +133,86 @@ export function generateEnvTemplate(appType: AppType, appBaseUrl?: string): stri
     "",
     "> These values belong in the app you are integrating with CentralAuth, not in this MCP server.",
   ].join("\n");
+}
+
+export function draftOrganizationFromPrompt(prompt: string, appType: AppType, appBaseUrl?: string): string {
+  const draft = deriveOrganizationSetup(prompt, appType, appBaseUrl);
+
+  return [
+    `## Suggested CentralAuth organization for ${labelForAppType(appType)}`,
+    "",
+    `- Suggested organization name: ${draft.name}`,
+    `- Recommended callback URL: \`${draft.callbackUrl}\``,
+    draft.whitelistDomain ? `- Suggested whitelist domain: \`${draft.whitelistDomain}\`` : undefined,
+    draft.customDomain ? `- Possible custom domain to register later: \`${draft.customDomain}\`` : undefined,
+    draft.allowLocalhost ? "- Development note: enable `allowLocalhost` in organization settings while developing locally." : undefined,
+    "",
+    generateProjectEnv(appType, "your_organization_id", undefined, appBaseUrl),
+  ].filter(Boolean).join("\n");
+}
+
+export function buildProjectEnvValues(
+  appType: AppType,
+  organizationId: string,
+  clientSecret?: string,
+  appBaseUrl?: string,
+  authBaseUrl = "https://centralauth.com",
+): Record<string, string> {
+  const callbackUrl = `${(appBaseUrl ?? defaultBaseUrl(appType)).replace(/\/$/, "")}${defaultCallbackPath(appType)}`;
+
+  const values: Record<string, string> = {
+    AUTH_BASE_URL: authBaseUrl,
+    AUTH_ORGANIZATION_ID: organizationId,
+    AUTH_SECRET: clientSecret ?? "replace_with_client_secret",
+    AUTH_CALLBACK_URL: callbackUrl,
+  };
+
+  if (appType === "react-native") {
+    values.AUTH_APP_ID = "com.example.app";
+    values.AUTH_DEVICE_ID = "unique-device-id";
+  }
+
+  return values;
+}
+
+export function generateProjectEnv(
+  appType: AppType,
+  organizationId: string,
+  clientSecret?: string,
+  appBaseUrl?: string,
+  authBaseUrl = "https://centralauth.com",
+): string {
+  const values = buildProjectEnvValues(appType, organizationId, clientSecret, appBaseUrl, authBaseUrl);
+
+  return [
+    `## Ready-to-paste env block for ${labelForAppType(appType)}`,
+    "",
+    "```env",
+    ...Object.entries(values).map(([key, value]) => `${key}=${value}`),
+    "```",
+  ].join("\n");
+}
+
+export function deriveOrganizationSetup(prompt: string, appType: AppType, appBaseUrl?: string): {
+  name: string;
+  callbackUrl: string;
+  whitelistDomain?: string;
+  customDomain?: string;
+  allowLocalhost: boolean;
+} {
+  const sourceUrl = appBaseUrl ?? extractUrl(prompt) ?? defaultBaseUrl(appType);
+  const parsed = tryParseUrl(sourceUrl);
+  const hostname = parsed?.hostname;
+  const allowLocalhost = Boolean(hostname && ["localhost", "127.0.0.1"].includes(hostname));
+  const callbackUrl = `${sourceUrl.replace(/\/$/, "")}${defaultCallbackPath(appType)}`;
+
+  return {
+    name: deriveOrganizationName(prompt, appType),
+    callbackUrl,
+    whitelistDomain: parsed?.host,
+    customDomain: parsed && !allowLocalhost ? parsed.hostname : undefined,
+    allowLocalhost,
+  };
 }
 
 export function generateIntegrationSnippet(appType: AppType): string {
@@ -295,7 +387,7 @@ export function summarizeOpenIdConfiguration(oidc: OpenIdConfiguration): string 
   ].filter(Boolean).join("\n");
 }
 
-export const DEVELOPER_OVERVIEW_MARKDOWN = `# CentralAuth developer overview\n\nThis MCP server is built around the CentralAuth developer docs. Use it to:\n\n- explain how to integrate CentralAuth in a project\n- validate callback, domain, and environment setup\n- generate starter env templates and code snippets\n\nKey documented endpoints:\n\n- OpenID discovery: \`https://centralauth.com/.well-known/openid-configuration\`\n- Verify endpoint: \`https://centralauth.com/api/v1/verify\`\n- Userinfo endpoint: \`https://centralauth.com/api/v1/userinfo\`\n`;
+export const DEVELOPER_OVERVIEW_MARKDOWN = `# CentralAuth developer overview\n\nThis MCP server is built around the CentralAuth developer docs. Use it to:\n\n- explain how to integrate CentralAuth in a project\n- validate callback, domain, and environment setup\n- generate starter env templates and code snippets\n- optionally create organizations and rotate secrets when admin mode is configured\n\nKey documented endpoints:\n\n- OpenID discovery: \`https://centralauth.com/.well-known/openid-configuration\`\n- Verify endpoint: \`https://centralauth.com/api/v1/verify\`\n- Userinfo endpoint: \`https://centralauth.com/api/v1/userinfo\`\n`;
 
 export const SECURITY_GUIDE_MARKDOWN = `# CentralAuth security and troubleshooting\n\n- Verify the OAuth \`state\` on callback to prevent CSRF.\n- Keep the client secret on the server only.\n- Use whitelist domains and make sure the callback URL matches the dashboard configuration.\n- Expect CentralAuth auth errors in the form \`{ errorCode, message }\`.\n- Prefer PKCE for web, mobile, and desktop clients.\n`;
 
@@ -322,8 +414,46 @@ function statusLine(name: string, ok: boolean, note: string): string {
   return `- ${ok ? "✅" : "❌"} ${name}: ${note}`;
 }
 
+function deriveOrganizationName(prompt: string, appType: AppType): string {
+  const cleaned = prompt.replace(/https?:\/\/\S+/g, "").replace(/\s+/g, " ").trim();
+  const quoted = cleaned.match(/["“]([^"”]+)["”]/)?.[1] ?? cleaned.match(/'([^']+)'/)?.[1];
+  let base = quoted ?? cleaned.split(/[.!?]/)[0] ?? "";
+
+  base = base
+    .replace(/^(create|make|set up|setup|spin up|provision)\s+/i, "")
+    .replace(/^(a|an|new)\s+/i, "")
+    .replace(/^(centralauth\s+)?organization\s+(for\s+)?/i, "")
+    .replace(/^(for|called|named)\s+/i, "")
+    .trim();
+
+  if (!base) {
+    base = `${labelForAppType(appType)} App`;
+  }
+
+  return base
+    .replace(/[^a-zA-Z0-9\s-]/g, " ")
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 8)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ");
+}
+
+function extractUrl(prompt: string): string | undefined {
+  return prompt.match(/https?:\/\/\S+/)?.[0];
+}
+
+function tryParseUrl(value: string): URL | undefined {
+  try {
+    return new URL(value);
+  } catch {
+    return undefined;
+  }
+}
+
 function defaultCallbackPath(appType: AppType): string {
   switch (appType) {
+    case "express":
     case "react-native":
       return "/auth/callback";
     case "desktop":

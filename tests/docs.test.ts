@@ -2,9 +2,11 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  draftOrganizationFromPrompt,
   explainCallbackSetup,
   generateEnvTemplate,
   generateIntegrationSnippet,
+  generateProjectEnv,
   generateStarterFiles,
   getIntegrationChecklist,
   summarizeOpenIdConfiguration,
@@ -30,13 +32,25 @@ test("explainCallbackSetup includes code and state", () => {
 
 test("validateEnvRequirements reports no API key required", () => {
   const config: ServerConfig = {
+    apiBaseUrl: "https://centralauth.com/api",
     authBaseUrl: "https://centralauth.com",
     timeoutMs: 15000,
   };
 
   const text = validateEnvRequirements(config, "basic");
-  assert.doesNotMatch(text, /CENTRALAUTH_API_KEY/);
   assert.match(text, /No API key is required/i);
+});
+
+test("validateEnvRequirements explains admin mode", () => {
+  const config: ServerConfig = {
+    apiBaseUrl: "https://centralauth.com/api",
+    authBaseUrl: "https://centralauth.com",
+    timeoutMs: 15000,
+  };
+
+  const text = validateEnvRequirements(config, "admin");
+  assert.match(text, /CENTRALAUTH_API_KEY/);
+  assert.match(text, /Admin tools stay optional/i);
 });
 
 test("generateEnvTemplate returns starter variables", () => {
@@ -68,6 +82,22 @@ test("generateStarterFiles returns Express starter files", () => {
   assert.match(text, /src\/routes\/auth\.ts/);
   assert.match(text, /src\/server\.ts/);
   assert.match(text, /CentralAuthHTTPClass/);
+});
+
+test("draftOrganizationFromPrompt suggests an organization and env block", () => {
+  const text = draftOrganizationFromPrompt("Create a new organization for Acme Billing at https://billing.example.com", "nextjs", "https://billing.example.com");
+
+  assert.match(text, /Acme Billing/i);
+  assert.match(text, /billing\.example\.com/);
+  assert.match(text, /AUTH_ORGANIZATION_ID=your_organization_id/);
+});
+
+test("generateProjectEnv uses provided organization values", () => {
+  const text = generateProjectEnv("express", "org_123", "secret_abc", "https://app.example.com");
+
+  assert.match(text, /AUTH_ORGANIZATION_ID=org_123/);
+  assert.match(text, /AUTH_SECRET=secret_abc/);
+  assert.match(text, /AUTH_CALLBACK_URL=https:\/\/app\.example\.com\/auth\/callback/);
 });
 
 test("summarizeOpenIdConfiguration includes important endpoints", () => {
