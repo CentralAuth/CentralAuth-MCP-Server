@@ -4,6 +4,10 @@
   "private": false,
   "type": "module",
   "description": "MCP server for AI-assisted CentralAuth integration guidance.",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/CentralAuth/CentralAuth-MCP-Server.git"
+  },
   "bin": {
     "centralauth-mcp-server": "./dist/index.js"
   },
