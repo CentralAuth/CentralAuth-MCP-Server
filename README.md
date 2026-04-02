@@ -13,24 +13,10 @@ A Model Context Protocol (MCP) server that helps AI tools integrate **CentralAut
 - Project env writing support that can update `.env` / `.env.local` files directly
 - Optional admin-mode organization creation and secret rotation
 
-## Requirements
-
-- Node.js 18+
-- **No CentralAuth API key is required**
-
-## Setup
-
-```bash
-npm install
-npm run build
-```
-
 ## Run
 
 ```bash
-npm run dev
-# or
-npm start
+npx -y centralauth-mcp-server
 ```
 
 ## Project auto-detection
@@ -83,12 +69,14 @@ This server is designed to help AI assistants do more than just explain OAuth co
 
 ### Optional admin-mode tools
 
-These require `CENTRALAUTH_API_KEY` in the MCP server environment:
+These require `CENTRALAUTH_API_KEY` in the MCP server environment. This has to be a tenant-level API key with permissions to create and manage organizations.
 
 - `create_organization_from_prompt`
 - `rotate_organization_secret`
 
-Both admin tools can also update a target project's `.env` file automatically when you provide a `targetProjectPath` or `targetEnvPath`.
+Both admin tools can also update a target project's `.env` file automatically.
+
+Note that the `CENTRALAUTH_API_KEY` must be set in the MCP server environment, not just the project environment variables. 
 
 ## Example prompts
 
@@ -113,11 +101,11 @@ Write the CentralAuth env values for organization "Acme Private Portal" and dete
 ### Admin-mode examples
 
 ```text
-Create a new CentralAuth organization from the prompt "Acme customer portal" under tenant `YOUR_TENANT_ID` and write the env values into /path/to/my-nextjs-app.
+Create a new CentralAuth organization from the prompt "Acme customer portal" under tenant `YOUR_TENANT_ID` and write the env values to this project's env file.
 ```
 
 ```text
-Rotate the secret for organization `YOUR_ORG_ID` and update this project's env file.
+Rotate the secret for organization `YOUR_ORGANIZATION_ID` and update this project's env file.
 ```
 
 ## Example MCP config
